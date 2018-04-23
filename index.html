@@ -1,0 +1,1546 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>World Migrations</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <style>
+        /* Set height of the grid so .sidenav can be 100% (adjust if needed) */
+        .row.content {
+            height: 100%
+        }
+
+        .background {
+            fill: none;
+            pointer-events: all;
+        }
+
+        /* Set gray background color and 100% height */
+        .map {
+            background-color: white;
+            height: 100%;
+            overflow: hidden;
+            stroke-width: 2px;
+        }
+
+        .lines {
+            stroke-width: 2px;
+        }
+
+        .active {
+            stroke: darkgray !important;
+            stroke-width: 1px !important;
+        }
+        /* Set black background color, white text and some padding */
+        footer {
+            background-color: white;
+            padding: 15px;
+        }
+
+        /* On small screens, set height to 'auto' for sidenav and grid */
+        @media screen and (max-width: 1000px) {
+            .map {
+                height: auto;
+                padding: 15px;
+            }
+
+            .row.content {
+                height: auto;
+            }
+        }
+
+        .line {
+            fill: none;
+            stroke: lightgray;
+        }
+
+        .Yaxis path {
+            stroke: lightgray;
+        }
+
+        .Yaxis line {
+            stroke: lightgray;
+        }
+
+        .Yaxis text {
+            fill: #555;
+        }
+
+        .Xaxis path {
+            stroke: lightgray;
+        }
+
+        .Xaxis line {
+            stroke: lightgray;
+        }
+
+        .Xaxis text {
+            fill: #555;
+        }
+
+        .dot {
+            fill: lightgray;
+            stroke: rgba(0, 0, 255, 0);
+            stroke-width: 10px;
+        }
+
+        .dot--selected {
+            fill: darkgray !important;
+        }
+
+        .dot--hover {
+            fill: lightgray;
+            stroke: rgba(0, 0, 255, 0.3);
+            stroke-width: 10px;
+        }
+
+        .legends {
+            stroke: white;
+        }
+
+            .legends:hover {
+                stroke: black !important;
+            }
+
+        .line--fade {
+            opacity: 0.8;
+        }
+
+        .line--hover {
+            stroke: darkgray;
+            stroke-width: 4px;
+        }
+
+        .grid line {
+            stroke: lightgrey;
+            stroke-opacity: 0.7;
+            stroke-width: 1px;
+            shape-rendering: crispEdges;
+        }
+
+        .grid path {
+            stroke-width: 0;
+        }
+
+        .selectedStory {
+            fill: darkblue;
+            stroke: none;
+        }
+
+        .unselectedStory {
+            fill: darkgray;
+            stroke: none;
+            cursor: pointer;
+        }
+
+            .unselectedStory:hover {
+                fill: lightgray;
+                stroke: none;
+            }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row content">
+            <div class="col-sm-8">
+                <h1 id="thetitle">World Population, 2017</h1>
+            </div>
+            <div id="lineslegend" class="col-sm-4" style="background-color:none;">
+                <h3 id="thetitlelines">All Years</h3>
+            </div>
+        </div>
+        <div class="row content">
+            <div id="maplegend" class="col-sm-8" style="background-color:none;">
+            </div>
+            <div id="lineslegend2" class="col-sm-4" style="background-color:none;">
+            </div>
+        </div>
+        <div class="row content">
+            <div id="map" class="col-sm-8 map" style="min-width:1200px;">
+            </div>
+            <div id="lines" class="col-sm-4 lines">
+            </div>
+        </div>
+        <div class="row content">
+            <div id="slider" class="col-sm-8" style="background-color:none;">
+            </div>
+            <div id="animate" class="col-sm-4" style="background-color:none;margin-top:15px;">
+                <div id="PlayYears">Play Years</div>
+            </div>
+        </div>
+        <div class="row content">
+            <div id="story" class="col-sm-12" style="background-color:none;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        var w = window.innerWidth - 100;//used to compute available space
+        active = d3.select(null);//used for zoom
+
+        //lines
+        var margin = { top: 50, right: 10, bottom: 30, left: 60 },
+            width = (w * (4 / 12)) - margin.left - margin.right,
+            height = 600 - margin.top - margin.bottom;
+        //map
+        var margin2 = { top: 0, right: 0, bottom: 0, left: 0 },
+            width2 = (w * (8 / 12)) - margin2.left - margin2.right,
+            height2 = 600 - margin2.top - margin2.bottom;
+
+        var projection = d3.geoEquirectangular()
+            .scale(width2 / 6)
+            .translate([width2 / 2, height2 / 2]);
+        var path = d3.geoPath().projection(projection);
+
+        var zoom = d3.zoom()
+            .scaleExtent([1, 8])
+            .on("zoom", zoomed);
+        var activeCountry = "";
+        var activeCountryDescription = "";
+
+        var selectedyear = "2017";
+        var tmpyear = 0;
+
+        var slider = d3.select("#slider")
+            .append("svg")
+            .attr("width", 1250)
+            .attr("height", 50)
+            .append("g");
+
+        //maplegend
+        var maplegend = d3.select("#maplegend")
+            .append("svg")
+            .attr("width", width2 + margin2.left + margin2.right)
+            .attr("height", 35)
+
+        var lineslegend2 = d3.select("#lineslegend2")
+            .append("svg")
+            .attr("width", width2 + margin2.left + margin2.right)
+            .attr("height", 35)
+
+
+
+        var map = d3.select("#map")
+            .append("svg")
+            .attr("width", width2 + margin2.left + margin2.right)
+            .attr("height", height2 + margin2.top + margin2.bottom)
+            .append("g")
+            .on("click", stopped, true);
+
+        map.call(zoom);
+
+        map.append("rect")
+            .attr("class", "background")
+            .attr("width", width2)
+            .attr("height", height2)
+            .on("click", reset);
+
+        var selectedStory = "World Population";
+        var story = d3.select("#story")
+            .append("svg")
+            .attr("width", w)
+            .attr("height", 60)
+
+
+        var storyData = [{ id: "WorldPopulation", desc: "World Population" },
+        { id: "NetMigrationP", desc: "Migration as % of population" },
+        { id: "FNetMigrationP", desc: "Female Migration as % of population" },
+        { id: "MNetMigrationP", desc: "Male Migration as % of population" }
+
+        ];
+        var storyLegend = story.append("g")
+            .attr("class", "story")
+            ;
+        storyLegend
+            .selectAll("rect")
+            .data(storyData)
+            .enter()
+            .append("rect")
+            .attr("id", function (d) { return d.id })
+            .attr("class", function (d) {
+                if (d.desc === selectedStory) {
+                    return "selectedStory";
+                }
+                else {
+                    return "unselectedStory";
+                }
+            })
+            .attr("x", function (d, i) { return ((i * w / 5)) })
+            .attr("y", 10)
+            .attr("width", w / 6)
+            .attr("height", 40)
+            .on("click", function (d) {
+                story.selectAll(".selectedStory")
+                    .classed("selectedStory", false)
+                    .classed("unselectedStory", true);
+                d3.select(this)
+                    .classed("selectedStory", true)
+                    .classed("unselectedStory", false);
+                selectedStory = d.desc;
+
+                resetData();
+            }
+
+            );
+
+        storyLegend
+            .selectAll("text")
+            .data(storyData)
+            .enter()
+            .append("text")
+            .style('cursor', 'pointer')
+            .attr("x", function (d, i) { return ((w / 5 * i) + (w / 12)) })
+            .style("fill", "white")
+            .style("text-anchor", "middle")
+            .attr("y", 15)
+            .attr("width", w / 6)
+            .attr("dy", "1.2em")
+            .attr("font-size", "16px")
+            .attr("font-weight", "bold")
+            .text(function (d) { return d.desc; })
+            .on("click", function (d) {
+                story.selectAll(".selectedStory")
+                    .classed("selectedStory", false)
+                    .classed("unselectedStory", true);
+                d3.select("#" + d.id)
+                    .classed("selectedStory", true)
+                    .classed("unselectedStory", false);
+                selectedStory = d.desc;
+                resetData();
+            }
+            );
+
+        ;
+        var legendCount = 0;
+        var pagerWidth = 0;
+        var legendWidth = 0; var legendSpacing = 0;
+        var netLegendWidth = 0;
+        var legendPerPage, totalPages, pageNo;
+        var tooltip, lines, colorScale, colorScale2;
+        var x, y;
+        var data = [];
+        var countries = d3.map();
+        var minPop = 0;
+        var maxPop = 0;
+        var rates = d3.map();//dictionary key=Country Names, then key=year
+        d3.queue()
+            .defer(d3.json, "/data/countries.geojson.txt")
+            .defer(d3.csv, "/data/Data_Extract_From_Population_estimates_and_projections.csv")
+            .defer(d3.csv, "/data/MigrantStock.csv")
+            .await(function (error, geojson, popdata, migrantdata) {
+
+
+                var season = d3.select("#season");
+                var yearSlider = d3.select("#yearSlider");
+
+
+                geojson.features.forEach(function (d) {
+                    countries.set(d.properties.adm0_a3,
+                        d.properties.admin
+                    );
+                });
+
+                //data pre-processing
+                popdata.forEach(function (d) {
+                    let years = d3.map();
+
+                    if (countries.keys().includes(d["Country Code"]) //&& d["Country Code"] !== "CHN" && d["Country Code"] !== "IND"
+                    ) {
+
+
+                        for (var property in d) {
+                            //set values as numers
+                            if (property.endsWith("]")) {
+                                if (d.hasOwnProperty(property)) {
+                                    if (d[property] != null)
+                                        d[property] = +d[property];
+                                }
+                            }
+                            if (property.endsWith("]")) {
+                                let year = +property.substring(8, 12);
+                                if ([2017,
+                                    2015,
+                                    2010,
+                                    2005,
+                                    2000,
+                                    1995,
+                                    1990,
+                                ].includes(year)) {
+                                    let popVal = d[property];
+                                    if ($.isNumeric(popVal)) {
+                                        if (popVal > maxPop) {
+                                            maxPop = popVal;
+                                        }
+                                        if (minPop == 0) {
+                                            minPop = popVal;
+                                        }
+                                        if (popVal < minPop) {
+                                            minPop = popVal;
+                                        }
+                                        years.set(year,
+                                            {
+                                                year: year, population: popVal //, cnf: d["yr" + year + "cnf"], rnk: d["yr" + year + "rnk"]
+                                            }
+                                        );
+                                    }
+                                }
+
+
+
+
+                            }
+                        }
+
+                        rates.set(d["Country Code"],
+                            years
+                        );
+                    }
+                });
+
+                //data pre-processing
+                migrantdata.forEach(function (d) {
+                    if (countries.keys().includes(d["CountryCode"]) //&& d["Country Code"] !== "CHN" && d["Country Code"] !== "IND"
+                    ) {
+
+                        for (var property in d) {
+                            //set values as numers
+                            if (property !== "CountryCode") {
+                                if (d.hasOwnProperty(property)) {
+                                    if (d[property] != null)
+                                        d[property] = +d[property];
+                                }
+                            }
+                        }
+                        let year = d["Year"];
+                        let country = rates.get(d["CountryCode"]);
+                        if (country != null) {
+                            var yearobj = country.get(year);
+                            if (yearobj != null) {
+                                let tmpobj = { year: year, T0_4: d["T0-4"], T5_9: d["T5-9"], T10_14: d["T10-14"], T15_19: d["T15-19"], T20_24: d["T20-24"], T25_29: d["T25-29"], T30_34: d["T30-34"], T35_39: d["T35-39"], T40_44: d["T40-44"], T45_49: d["T45-49"], T50_54: d["T50-54"], T55_59: d["T55-59"], T60_64: d["T60-64"], T65_69: d["T65-69"], T70_74: d["T70-74"], T75P: d["T75+"], TTotal: d["TTotal"], M0_4: d["M0-4"], M5_9: d["M5-9"], M10_14: d["M10-14"], M15_19: d["M15-19"], M20_24: d["M20-24"], M25_29: d["M25-29"], M30_34: d["M30-34"], M35_39: d["M35-39"], M40_44: d["M40-44"], M45_49: d["M45-49"], M50_54: d["M50-54"], M55_59: d["M55-59"], M60_64: d["M60-64"], M65_69: d["M65-69"], M70_74: d["M70-74"], M75P: d["M75+"], MTotal: d["MTotal"], F0_4: d["F0-4"], F5_9: d["F5-9"], F10_14: d["F10-14"], F15_19: d["F15-19"], F20_24: d["F20-24"], F25_29: d["F25-29"], F30_34: d["F30-34"], F35_39: d["F35-39"], F40_44: d["F40-44"], F45_49: d["F45-49"], F50_54: d["F50-54"], F55_59: d["F55-59"], F60_64: d["F60-64"], F65_69: d["F65-69"], F70_74: d["F70-74"], F75P: d["F75+"], FTotal: d["FTotal"] };
+                                let r = Object.assign(yearobj, tmpobj);//merge the properties to the current properties
+                                country.set(year, r);//save the year
+                            }
+                        }
+                    }
+
+                });
+
+
+
+                colorScale = d3.scaleSequential(d3.interpolatePlasma);
+                colorScale.domain([maxPop, minPop]);
+
+                colorScale2 = d3.scaleSequential(d3.interpolateViridis);
+                colorScale2.domain([75, 0]);
+
+                drawlines();
+
+                data = rates.get("USA").keys();//grab the years from the USA object
+                slider.append("line")          // attach a line
+                    .attr("id", "axis0")
+                    .style("stroke", "darkgray")  // colour the line
+                    .attr("x1", 50)     // x position of the first end of the line
+                    .attr("y1", 23)      // y position of the first end of the line
+                    .attr("x2", 1150)     // x position of the second end of the line
+                    .attr("y2", 23);    // y position of the second end of the line
+
+                /******************************************************************************************************/
+                /***********************************************LEGEND*************************************************/
+                /******************************************************************************************************/
+                /* REF modified from http://bl.ocks.org/pragyandas/6af4113bdb9127260ce1 */
+
+                legendCount = data.length;
+
+                pagerWidth = 1200;
+                legendWidth = 20; legendSpacing = 170;
+
+                netLegendWidth = (legendWidth + legendSpacing) * legendCount;
+                //legendPerPage, totalPages, pageNo;
+
+                if (netLegendWidth / pagerWidth > 1) {
+
+                    legendPerPage = Math.floor(pagerWidth / (legendWidth + legendSpacing));
+                    totalPages = Math.ceil(legendCount / legendPerPage);
+                    pageNo = 2;
+
+                    var startIndex = (pageNo - 1) * legendPerPage;
+                    var endIndex = startIndex + legendPerPage;
+                    var seriesSubset = [];
+
+                    for (var i = 0; i < data.length; i++) {
+                        if (i >= startIndex && i < endIndex) {
+                            seriesSubset.push(data[i]);
+                        }
+                    }
+
+                    DrawLegendSubset(seriesSubset, legendPerPage, pageNo, totalPages);
+                }
+
+
+                /******************************************************************************************************/
+                /***********************************************END LEGEND*************************************************/
+                /******************************************************************************************************/
+                /* REF http://bl.ocks.org/pragyandas/6af4113bdb9127260ce1 */
+
+                drawLegends();
+                drawMaps(geojson);
+            });
+
+        function drawlines() {
+            x = d3.scaleLinear().range([0, width]);
+            y = d3.scaleLinear().range([height, 0]);
+            let propertyToShow;//population
+            switch (selectedStory) {
+                case 'World Population':
+                    propertyToShow = "population";
+                    y.domain([minPop, maxPop]);
+                    break;
+                case 'Migration as % of population':
+                    propertyToShow = "TTotal";
+                    y.domain([0, 100]);
+                    break;
+                case 'Female Migration as % of population':
+                    propertyToShow = "FTotal";
+                    y.domain([0, 100]);
+                    break;
+                case 'Male Migration as % of population':
+                    propertyToShow = "MTotal";
+                    y.domain([0, 100]);
+                    break;
+            }
+
+            if (activeCountry !== "") {
+                let ss = propertyToShow.substring(0, 1);
+                let max = 0;
+                rates.get(activeCountry).values().forEach(function (object) {
+                    for (var property in object) {
+
+                        if (property.substring(0, 1) === ss) {
+                            let d = +object[property];
+                            if (d > max) {
+                                max = d;
+                            }
+
+                        }
+                    }
+                });
+                y.domain([0, max]);
+            }
+
+
+            x.domain([1990, 2017]);
+
+            let xticks = [1990, 1995, 2000, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017];
+            // gridlines in x axis function
+            function make_x_gridlines() {
+                return d3.axisBottom(x).tickValues(xticks)
+            }
+
+            // gridlines in y axis function
+            function make_y_gridlines() {
+                return d3.axisLeft(y)
+            }
+
+            if (lines == null) {
+                lines = d3.select("#lines")
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            }
+            else {
+                d3.select("#lines svg").remove();
+                lines = d3.select("#lines")
+                    .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            }
+
+
+            tooltip = lines.append("g")
+                .style("display", "none")
+                .attr("transform", "translate(" + 10 + "," + 10 + ")")
+                ;
+
+            tooltip.append("rect")
+                .attr("class", "tooltipBox")
+                .attr("width", 200)
+                .attr("height", 90)
+                .attr("fill", "white")
+                .attr("stroke", "darkgrey")
+                .style("opacity", 0.8);
+
+            tooltip.append("text")
+                .attr("id", "tool1")
+                .attr("x", 5)
+                .attr("dy", "1.2em")
+                .style("text-anchor", "left")
+                .attr("font-size", "15px")
+                .attr("font-weight", "bold")
+                .text(activeCountryDescription)
+                ;
+
+            tooltip.append("text")
+                .attr("id", "tool2")
+                .attr("x", 5)
+                .attr("y", 33)
+                .attr("dy", "1.2em")
+                .style("text-anchor", "left")
+                .attr("font-size", "11px")
+                .text(selectedStory);
+
+            tooltip.append("text")
+                .attr("id", "toolRate")
+                .attr("x", 5)
+                .attr("y", 43)
+                .attr("dy", "1.2em")
+                .style("text-anchor", "left")
+                .attr("font-size", "30px")
+                .attr("font-weight", "bold")
+                .text("33%");
+
+            // add the X gridlines
+            lines.append("g")
+                .attr("class", "grid")
+                .attr("transform", "translate(0," + height + ")")
+                .call(make_x_gridlines()
+                    .tickSize(-height)
+                    .tickFormat("")
+                )
+
+            // add the Y gridlines
+            lines.append("g")
+                .attr("class", "grid")
+                .call(make_y_gridlines()
+                    .ticks(6)
+                    .tickSize(-width)
+                    .tickFormat("")
+                )
+
+            // Add the X Axis
+            lines.append("g")
+                .attr("class", "Xaxis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(x).tickValues(xticks).tickFormat(d => "'" + d.toString().substring(2, 4)));
+
+            // Add the Y Axis
+            var yax = lines.append("g")
+                .attr("class", "Yaxis");
+
+            switch (selectedStory) {
+                case 'World Population':
+                    yax.call(d3.axisLeft(y).tickFormat(d => parseInt(d / 1000000) + " mi"));
+                    break;
+                default:
+                    yax.call(d3.axisLeft(y).tickFormat(d => d + " %"));
+                    break;
+            }
+
+
+            rates.keys().forEach(function (d) {
+                if (activeCountry === "" || activeCountry === d) {
+
+                    let cssclass = "line";
+                    let CountryCode = d;
+                    let csslinelocator = CountryCode;
+
+
+                    cssclass = csslinelocator + " " + cssclass;
+                    let valueline2 = d3.line()
+                        .defined(function (d) { return d.year != null & d[propertyToShow] != null; })
+                        .x(function (d) {
+                            return x(+d.year);
+                        })
+                        .y(function (d) {
+                            return y(d[propertyToShow]);
+                        });
+
+                    let linesdata = rates.get(d).values();
+                    if (activeCountry !== "") {
+
+                        let propertyToShow;//population
+                        switch (selectedStory) {
+                            case 'Migration as % of population':
+                                ['T0_4', 'T5_9', 'T10_14', 'T15_19', 'T20_24', 'T25_29', 'T30_34', 'T35_39', 'T40_44', 'T45_49', 'T50_54', 'T55_59', 'T60_64', 'T65_69', 'T70_74', 'T75P'].forEach(function (d) {
+                                    let prop = d;
+                                    let valueline2d = d3.line()
+                                        .defined(function (d) { return d.year != null & d[prop] != null; })
+                                        .x(function (d) {
+                                            return x(+d.year);
+                                        })
+                                        .y(function (d) {
+                                            return y(d[prop]);
+                                        });
+
+                                    let io = d.indexOf('_');
+                                    let l = d.length - 1;
+                                    if (io > 0) {
+                                        l = io;
+                                    }
+                                    let va = +d.substring(1, l);
+                                    // Add the valueline path.
+                                    lines
+                                        .append("path")
+                                        .data([linesdata])
+                                        .attr("class", "line")
+                                        .style("stroke", function (d) {
+                                            return colorScale2(va);
+                                        })
+                                        .attr("d", valueline2d);
+
+                                    linesdata.forEach(function (d) {
+                                        if (d.year != null & d[prop] != null) {
+                                            lines.append("circle").data([d])
+                                                //.attr("class", "dot " + csslinelocator + " Year" + d.year)
+                                                .attr("cx", x(+d.year))
+                                                .attr("cy", y(d[prop]))
+                                                .attr("r", 2.5);
+
+                                        }
+                                    });
+                                });
+
+                                break;
+                            case 'Female Migration as % of population':
+                                ['F0_4', 'F5_9', 'F10_14', 'F15_19', 'F20_24', 'F25_29', 'F30_34', 'F35_39', 'F40_44', 'F45_49', 'F50_54', 'F55_59', 'F60_64', 'F65_69', 'F70_74', 'F75P'].forEach(function (d) {
+                                    let prop = d;
+                                    let valueline3d = d3.line()
+                                        .defined(function (d) { return d.year != null & d[prop] != null; })
+                                        .x(function (d) {
+                                            return x(+d.year);
+                                        })
+                                        .y(function (d) {
+                                            return y(d[prop]);
+                                        });
+
+                                    let io = d.indexOf('_');
+                                    let l = d.length - 1;
+                                    if (io > 0) {
+                                        l = io;
+                                    }
+                                    let va = +d.substring(1, l);
+                                    // Add the valueline path.
+                                    lines
+                                        .append("path")
+                                        .data([linesdata])
+                                        .attr("class", "line")
+                                        .style("stroke", function (d) {
+                                            return colorScale2(va);
+                                        })
+                                        .attr("d", valueline3d);
+
+                                    linesdata.forEach(function (d) {
+                                        if (d.year != null & d[prop] != null) {
+                                            lines.append("circle").data([d])
+                                                //.attr("class", "dot " + csslinelocator + " Year" + d.year)
+                                                .attr("cx", x(+d.year))
+                                                .attr("cy", y(d[prop]))
+                                                .attr("r", 2.5);
+
+                                        }
+
+                                    });
+                                });
+
+                                break;
+                            case 'Male Migration as % of population':
+                                ['M0_4', 'M5_9', 'M10_14', 'M15_19', 'M20_24', 'M25_29', 'M30_34', 'M35_39', 'M40_44', 'M45_49', 'M50_54', 'M55_59', 'M60_64', 'M65_69', 'M70_74', 'M75P'].forEach(function (d) {
+                                    let prop = d;
+                                    let valueline4d = d3.line()
+                                        .defined(function (d) { return d.year != null & d[prop] != null; })
+                                        .x(function (d) {
+                                            return x(+d.year);
+                                        })
+                                        .y(function (d) {
+                                            return y(d[prop]);
+                                        });
+
+                                    let io = d.indexOf('_');
+                                    let l = d.length - 1;
+                                    if (io > 0) {
+                                        l = io;
+                                    }
+                                    let va = +d.substring(1, l);
+                                    //console.log(va);
+                                    // Add the valueline path.
+                                    lines
+                                        .append("path")
+                                        .data([linesdata])
+                                        .attr("class", "line")
+                                        .style("stroke", function (d) {
+                                            return colorScale2(va);
+                                        })
+                                        .attr("d", valueline4d);
+
+                                    linesdata.forEach(function (d) {
+                                        if (d.year != null & d[prop] != null) {
+                                            lines.append("circle").data([d])
+                                                //.attr("class", "dot " + csslinelocator + " Year" + d.year)
+                                                .attr("cx", x(+d.year))
+                                                .attr("cy", y(d[prop]))
+                                                .attr("r", 2.5);
+
+                                        }
+                                    });
+                                });
+
+                                break;
+                            case 'World Population':
+                                // Add the valueline path.
+                                lines
+                                    .append("path")
+                                    .data([linesdata])
+                                    .attr("class", cssclass)
+                                    .attr("d", valueline2)
+                                    .on("mouseover", function (d) {
+                                        if (activeCountry === "" || activeCountry === CountryCode) {
+                                            onfocusCountry(CountryCode);
+                                        }
+                                    })
+                                    .on("mouseout", function (d) {
+                                        losefocusCountry(CountryCode);
+                                    });
+
+                                linesdata.forEach(function (d) {
+                                    if (d.year != null & d[propertyToShow] != null) {
+                                        lines.append("circle").data([d])
+                                            .attr("class", "dot " + csslinelocator + " Year" + d.year)
+                                            .attr("cx", x(+d.year))
+                                            .attr("cy", y(d[propertyToShow]))
+                                            .attr("r", 2.5)
+                                            .on("mouseover", function (d) {
+                                                if (activeCountry === "" || activeCountry === CountryCode) {
+                                                    tmpyear = d.year;
+                                                    onfocusCountry(CountryCode);
+                                                    d3.select(this).classed("dot--hover", true).raise();
+                                                }
+                                            })
+                                            .on("mouseout", function (d) {
+                                                tmpyear = 0;
+                                                losefocusCountry(CountryCode);
+                                                d3.select(this).classed("dot--hover", false);
+                                            });;
+                                    }
+                                });
+                                break;
+                        }
+                    }
+                    else {
+
+                        // Add the valueline path.
+                        lines
+                            .append("path")
+                            .data([linesdata])
+                            .attr("class", cssclass)
+                            .attr("d", valueline2)
+                            .on("mouseover", function (d) {
+                                if (activeCountry === "" || activeCountry === CountryCode) {
+                                    onfocusCountry(CountryCode);
+                                }
+                            })
+                            .on("mouseout", function (d) {
+                                losefocusCountry(CountryCode);
+                            });
+
+                        linesdata.forEach(function (d) {
+                            if (d.year != null & d[propertyToShow] != null) {
+                                lines.append("circle").data([d])
+                                    .attr("class", "dot " + csslinelocator + " Year" + d.year)
+                                    .attr("cx", x(+d.year))
+                                    .attr("cy", y(d[propertyToShow]))
+                                    .attr("r", 2.5)
+                                    .on("mouseover", function (d) {
+                                        if (activeCountry === "" || activeCountry === CountryCode) {
+                                            tmpyear = d.year;
+                                            onfocusCountry(CountryCode);
+                                            d3.select(this).classed("dot--hover", true).raise();
+                                        }
+                                    })
+                                    .on("mouseout", function (d) {
+                                        tmpyear = 0;
+                                        losefocusCountry(CountryCode);
+                                        d3.select(this).classed("dot--hover", false);
+                                    });;
+                            }
+                        });
+
+                    }
+
+
+                }
+            });
+        }
+
+        function drawLegends() {
+            var colors = []
+
+            if (selectedStory === "World Population") {
+                for (var i = 0; i <= maxPop; i = i + (maxPop - minPop) / 10) {
+
+                    let v = Math.round(i / 100000000, 2) * 100000000;
+                    colors.push({ desc: (v / 1000000) + " mi", val: v });
+                }
+            }
+            else {
+                for (var i = 0; i <= 60; i = i + 60 / 10) {
+                    colors.push({ desc: i + "%", val: i });
+                }
+            }
+
+            maplegend
+                .select("g").remove();
+
+            var legend = maplegend.append("g")
+                .attr("class", "legend")
+                .attr("transform", "translate(" + (margin2.left * -1) + "," + ((margin2.top * -1) + 10) + ")")
+                ;
+
+
+            legend
+                .selectAll("rect")
+                .data(colors)
+                .enter()
+                .append("rect")
+                .attr("x", function (d, i) { return ((i * 90)) })
+                .attr("y", 0)
+                .attr("width", 20)
+                .attr("height", 15)
+                .style("stroke", "black")
+                .style("fill", function (d) { return colorScale(d.val) })
+                ;
+
+
+            legend
+                .selectAll("text")
+                .data(colors)
+                .enter()
+                .append("text")
+                .attr("x", function (d, i) { return ((i * 90) + 22) })
+                .style("fill", "black")
+                .attr("y", 0)
+                .attr("dy", "1.2em")
+                .attr("font-size", "12px")
+                .attr("font-weight", "bold")
+                .text(function (d) { return d.desc; })
+                ;
+
+            if (activeCountry != "" && selectedStory != "World Population") {
+                'T0_4', 'T5_9', 'T10_14', 'T15_19', 'T20_24', 'T25_29', 'T30_34', 'T35_39', 'T40_44', 'T45_49', 'T50_54', 'T55_59', 'T60_64', 'T65_69', 'T70_74', 'T75P'
+                var colors2 = [];
+                for (var i = 0; i <= 70; i = i + 10) {
+                    colors2.push({ desc: i + " to " + (i + 10) + "", val: i });
+                }
+
+                lineslegend2.select("g").remove();
+
+                var legend2 = lineslegend2.append("g")
+                    .attr("class", "legend")
+                    ;
+
+
+                legend2
+                    .selectAll("rect")
+                    .data(colors2)
+                    .enter()
+                    .append("rect")
+                    .attr("x", function (d, i) { return ((i * 70)) })
+                    .attr("y", 0)
+                    .attr("width", 20)
+                    .attr("height", 15)
+                    .style("stroke", "black")
+                    .style("fill", function (d) { return colorScale2(d.val) })
+                    ;
+
+
+                legend2
+                    .selectAll("text")
+                    .data(colors2)
+                    .enter()
+                    .append("text")
+                    .attr("x", function (d, i) { return ((i * 70) + 22) })
+                    .style("fill", "black")
+                    .attr("y", 0)
+                    .attr("dy", "1.2em")
+                    .attr("font-size", "12px")
+                    .attr("font-weight", "bold")
+                    .text(function (d) { return d.desc; })
+                    ;
+            }
+
+        }
+
+        function DrawLegendSubset(seriesSubset, legendPerPage, pageNo, totalPages) {
+
+            var legend = slider.selectAll("g.legendg")
+                .data(seriesSubset)
+                .enter().append("g")
+                .attr('class', 'legendg')
+                .attr("transform", function (d, i) { return "translate(" + i * (legendWidth + legendSpacing) + ", 20 )"; });
+
+
+            legend.append("circle")
+                .style('cursor', 'pointer')
+                .attr("cx", 130)
+                .attr("cy", 3)
+                .attr("r", 6)
+                .attr("class", "legends")
+                .style('fill', "rgb(0,125,182)")
+                .style("stroke", function (d) {
+                    if (selectedyear == d) {
+                        return "black";
+                    }
+                    else {
+                        return "white";
+                    }
+                })
+                .on("click", function (d) {
+                    selectedyear = d;
+
+                    resetData();
+                });
+
+            legend.append("text")
+                .attr("x", 130)
+                .attr("y", 25)
+                .attr("dy", ".35em")
+                .attr("class", "legend2")
+                .style("text-anchor", "middle")
+                .text(function (d) { return d; });
+
+
+            var pageText = slider.append("g")
+                .attr('class', 'pageNo')
+                .attr("transform", "translate( 0, 30)");
+
+            var TextPrior = pageText.append('text').attr('class', 'prevt')
+                .attr("dy", "1.2em")
+                .attr("font-size", "16px")
+                .attr("fill", "darkgray");
+
+
+            if (pageNo > 1) {
+                let priorpage = pageNo - 1;
+                let startIndex = (priorpage - 1) * legendPerPage;
+                let endIndex = startIndex + legendPerPage;
+                let min = 0;
+                let max = 0;
+                for (var i = 0; i < data.length; i++) {
+                    if (i >= startIndex && i < endIndex) {
+                        if (data[i] < min | min == 0) {
+                            min = data[i];
+                        }
+                        if (data[i] > max | max == 0) {
+                            max = data[i];
+                        }
+                    }
+                }
+
+                TextPrior.text(min + '-' + max);
+
+            }
+
+            var pageTextNext = slider.append("g")
+                .attr('class', 'pageNo')
+                .attr("transform", "translate( " + (pagerWidth - 40) + ", 30)");
+
+            var TextNext = pageTextNext.append('text')
+                .attr('class', 'nextt')
+                .style("text-anchor", "middle")
+                .attr("dy", "1.2em")
+                .attr("font-size", "16px")
+                .attr("fill", "darkgray");
+
+            if (pageNo != totalPages) {
+                let nextpage = pageNo + 1;
+                let startIndex = (nextpage - 1) * legendPerPage;
+                let endIndex = startIndex + legendPerPage;
+                let min = 0;
+                let max = 0;
+                for (var i = 0; i < data.length; i++) {
+                    if (i >= startIndex && i < endIndex) {
+                        if (data[i] < min | min == 0) {
+                            min = data[i];
+                        }
+                        if (data[i] > max | max == 0) {
+                            max = data[i];
+                        }
+                    }
+                }
+
+                TextNext.text(min + '-' + max);
+            }
+
+
+            var prevtriangle = slider.append("g")
+                .attr('class', 'prev')
+                .attr("transform", "translate(30, 10" + ")")
+                .on('click', prevLegend)
+                .style('cursor', 'pointer');
+
+            var nexttriangle = slider.append("g")
+                .attr('class', 'next')
+                .attr("transform", "translate(" + (pagerWidth - 40) + ", 10" + ")")
+                .on('click', nextLegend)
+                .style('cursor', 'pointer');
+
+            nexttriangle.append('text').text(">")
+                .attr("fill", "darkgray")
+                .attr("dy", "1.2em")
+                .attr("font-size", "16px")
+                .attr("font-weight", "bold");
+
+            prevtriangle.append('text').text("<")
+                .attr("fill", "darkgray")
+                .attr("dy", "1.2em")
+                .attr("font-size", "16px")
+                .attr("font-weight", "bold");
+
+            if (pageNo == totalPages) {
+                nexttriangle.style('opacity', '0')
+                pageTextNext.style('opacity', '0')
+                nexttriangle.on('click', '')
+                    .style('cursor', '');
+            }
+            else if (pageNo == 1) {
+                prevtriangle.style('opacity', '0')
+                pageText.style('opacity', '0')
+                prevtriangle.on('click', '')
+                    .style('cursor', '');
+            }
+
+        }
+
+        function prevLegend() {
+            pageNo--;
+
+            slider.selectAll("g.legendg").remove();
+            slider.select('.pageNo').remove();
+            slider.select('.prev').remove();
+            slider.select('.next').remove();
+            slider.select('.prevt').remove();
+            slider.select('.nextt').remove();
+
+            var startIndex = (pageNo - 1) * legendPerPage;
+            var endIndex = startIndex + legendPerPage;
+
+            var seriesSubset = [];
+
+            for (var i = 0; i < data.length; i++) {
+                if (i >= startIndex && i < endIndex) {
+                    seriesSubset.push(data[i]);
+                }
+            }
+
+            DrawLegendSubset(seriesSubset, legendPerPage, pageNo, totalPages);
+        }
+
+        function nextLegend() {
+            pageNo++;
+
+            slider.selectAll("g.legendg").remove();
+            slider.select('.pageNo').remove();
+            slider.select('.prev').remove();
+            slider.select('.next').remove();
+            slider.select('.prevt').remove();
+            slider.select('.nextt').remove();
+
+            var startIndex = (pageNo - 1) * legendPerPage;
+            var endIndex = startIndex + legendPerPage;
+
+            var seriesSubset = [];
+
+            for (var i = 0; i < data.length; i++) {
+                if (i >= startIndex && i < endIndex) {
+                    seriesSubset.push(data[i]);
+                }
+            }
+
+            DrawLegendSubset(seriesSubset, legendPerPage, pageNo, totalPages);
+        }
+
+        $("#PlayYears").button();
+        function doSetTimeout(i, index) {
+            setTimeout(function () {
+                selectedyear = i;
+
+                if (pageNo < (index + 1) / legendPerPage) {
+                    nextLegend();
+                }
+
+
+                resetData();
+            }, index * 800);
+        }
+        $("#PlayYears").on("click", function () {
+            for (var i = pageNo; i > 1; i--) {
+                prevLegend();
+            }
+
+            for (var i = 0; i < data.length; i++)
+                doSetTimeout(data[i], i);
+        });
+
+        function wrap(text, width) {
+            text.each(function () {
+                var text = d3.select(this),
+                    words = text.text().split(/\s+/).reverse(),
+                    word,
+                    line = [],
+                    lineNumber = 0,
+                    lineHeight = 1.1, // ems
+                    y = text.attr("y"),
+                    x = text.attr("x"),
+                    dy = parseFloat(text.attr("dy")),
+                    tspan = text.text(null).append("tspan").attr("x", x).attr("y", y).attr("dy", dy + "em");
+                while (word = words.pop()) {
+                    line.push(word);
+                    tspan.text(line.join(" "));
+                    if (tspan.node().getComputedTextLength() > width) {
+                        line.pop();
+                        tspan.text(line.join(" "));
+                        line = [word];
+                        tspan = text.append("tspan").attr("x", x).attr("y", y).attr("dy", ++lineNumber * lineHeight + dy + "em").text(word);
+                    }
+                }
+            });
+        }
+
+        function onfocusCountry(CountryCode) {
+            let Countryclass = CountryCode;
+            let countries2 = map.selectAll("path").filter("." + Countryclass);
+            countries2
+                .attr("stroke", "gray")
+                .raise();
+            map.selectAll("text").filter("." + Countryclass)
+                .raise();
+
+            if (activeCountry !== "") {
+                map.selectAll("path").filter("." + activeCountry).raise();
+                map.selectAll("text").filter("." + activeCountry).raise();
+            }
+
+
+            let line = lines.selectAll("path").filter("." + Countryclass)
+                .classed("line--hover", true)
+                .raise();
+
+            lines.selectAll("circle").filter("." + Countryclass)
+                .classed("dot--selected", true)
+                .raise();
+
+            let tmp = selectedyear;
+            if (tmpyear > 0) {
+                tmp = tmpyear
+            }
+
+            var value = rates.get(CountryCode);
+            if (value != null) {
+                ab = value.get(tmp);
+                if (ab != null) {
+
+                    let propertyToShow;//population
+                    switch (selectedStory) {
+                        case 'World Population':
+                            propertyToShow = "population";
+                            tooltip.select("#toolRate")
+                                .attr("fill", colorScale(ab[propertyToShow]))
+                                .text(Math.round(ab[propertyToShow] / 1000000, 0) + " mi");
+                            break;
+                        case 'Migration as % of population':
+                            propertyToShow = "TTotal";
+                            break;
+                        case 'Female Migration as % of population':
+                            propertyToShow = "FTotal";
+                            break;
+                        case 'Male Migration as % of population':
+                            propertyToShow = "MTotal";
+                            break;
+                    }
+                    if (selectedStory !== 'World Population') {
+                        tooltip.select("#toolRate")
+                            .attr("fill", colorScale(ab[propertyToShow]))
+                            .text(Math.round(ab[propertyToShow], 0) + " %");
+                    }
+
+                }
+            }
+
+            tooltip.select("#tool1").text(CountryCode);
+            let t = tooltip.select("#tool2").text(selectedStory);
+
+            wrap(t, 195);
+            tooltip.style("display", null);
+            tooltip.raise();
+
+            lines.selectAll("circle").filter("." + Countryclass).filter(".Year" + tmp)
+                .classed("dot--hover", true)
+                .raise();
+
+
+        }
+        function losefocusCountry(CountryCode) {
+
+
+
+            let Countryclass = CountryCode;
+            let countries2 = map.selectAll("path").filter("." + Countryclass);
+            countries2
+                //.attr("stroke-width", "1px")
+                .attr("stroke", "white");
+
+            lines.selectAll("circle").filter("." + Countryclass)
+                .classed("dot--selected", false)
+                .classed("dot--hover", false);
+
+            let line = lines.selectAll("path").filter("." + Countryclass)
+                .classed("line--hover", false);
+
+
+            tooltip.style("display", "none");
+        }
+
+        function drawMaps(geojson) {
+
+            map.selectAll("path")
+                .data(geojson.features)
+                .enter()
+                .append("path")
+                .attr("class", function (d) {
+                    return d.properties.adm0_a3;
+                })
+                .attr("d", path)
+                .style("fill", function (d) {
+                    //Get data value
+                    var value = rates.get(d.properties.adm0_a3);
+                    if (value != null) {
+                        var year = value.get(selectedyear);
+                        if (year != null) {
+                            let population = (year["population"]);
+                            if (population != null) {
+                                return colorScale(population);
+                            }
+                            return "#ccc";
+                        } else {
+                            //console.log("ups2");
+                            return "#ccc";
+                        }
+                    } else {
+                        //console.log("ups3");
+                        return "#ccc";
+                    }
+                })
+                .attr("stroke", "white")
+                .on("click", clicked)
+                .on("mouseover", function (d) {
+                    onfocusCountry(d.properties.adm0_a3);
+                })
+                .on("mouseout", function (d) {
+                    losefocusCountry(d.properties.adm0_a3);
+                })
+                ;
+            map.selectAll("path").each(function (d, i) {
+                var centroid = path.centroid(d);
+                let pa = d3.select(this);
+                let name = d.properties.adm0_a3;
+                let ab = name;
+
+                map.append("text")
+                    .attr("class", name)
+                    .style("text-anchor", "middle")
+                    .style("cursor", "default")
+                    .style("font-weight", "bold")
+                    .attr("font-size",
+                    function (d) {
+                        let painfo = pa.node().getBBox();
+                        let min = painfo.width;
+                        if (painfo.height < min) {
+                            min = painfo.height;
+                        }
+                        let siz = Math.ceil(min / 4);
+                        if (siz > 11) {
+                            siz = 11;
+                        }
+                        return (siz) + "px";
+                    }
+                    )
+                    .attr("fill", function (d) {
+                        if (name == "Hawaii") {
+                            return "black";
+                        }
+                        else {
+                            return "black";
+                        }
+                    })
+                    .on("click", function () {
+                        //invoke click of the path
+                        var e = document.createEvent('UIEvents');
+                        e.initUIEvent("click", true, true, window, 1);
+                        pa.node().dispatchEvent(e);
+
+                    })
+                    .on("mouseover", function (d) {
+                        onfocusCountry(name);
+                    })
+                    .on("mouseout", function (d) {
+                        losefocusCountry(name);
+                    })
+                    .attr("transform", function (d) { return "translate(" + centroid + ")"; })
+                    .text(ab);
+            });
+
+
+
+        }
+
+        //zoom stuff
+        function clicked(d) {
+            if (active.node() === this) return reset();
+            active.classed("active", false);
+            active = d3.select(this).classed("active", true);
+
+            var bounds = path.bounds(d),
+                dx = bounds[1][0] - bounds[0][0],
+                dy = bounds[1][1] - bounds[0][1],
+                x1 = (bounds[0][0] + bounds[1][0]) / 2,
+                y1 = (bounds[0][1] + bounds[1][1]) / 2;
+            let CountryCode = d.properties.adm0_a3;
+
+
+            activeCountry = CountryCode;
+            activeCountryDescription = d.properties.admin;
+            resetData();
+
+            switch (CountryCode) {//custom compute the centers for countries in the border of the map or with colonies to center on the main mass
+                case 'USA':
+                    x1 = width2 / 4.95;
+                    break;
+                case 'RUS':
+                    x1 = width2 / 1.24;
+                    break;
+                case 'NZL':
+                    x1 = width2 / 1.1;
+                    break;
+            }
+
+            var scale = Math.max(2, Math.min(7, 0.9 / Math.max(dx / width2, dy / height2))),
+                translate = [width2 / 2 - scale * x1, height2 / 2 - scale * y1];
+
+
+            map.transition()
+                .duration(1000)
+                .call(zoom.transform, d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)); // updated for d3 v4
+
+
+        }
+
+        function resetData() {
+            drawlines();
+            switch (selectedStory) {
+                case 'World Population':
+                    colorScale.domain([maxPop, minPop]);
+                    drawLegends();
+                    break;
+                default:
+                    colorScale.domain([60, 0]);
+                    drawLegends();
+            }
+
+            $("#thetitle").text(selectedStory + ", " + selectedyear + " " + activeCountryDescription);
+
+            if (activeCountryDescription === "") {
+                $("#thetitlelines").text("All Years");
+            }
+            else {
+
+                $("#thetitlelines").text("All Years (" + activeCountryDescription + ")");
+            }
+
+
+            slider.selectAll(".legends").style("stroke", function (d) {
+                if (selectedyear == d) {
+                    return "black";
+                }
+                else {
+                    return "white";
+                }
+            })
+
+            map.selectAll("path")
+                .transition()
+                .duration(300)
+                .style("fill", function (d) {
+                    //Get data value
+                    //console.log(d.properties.adm0_a3);
+                    var value = rates.get(d.properties.adm0_a3);
+                    if (value != null) {
+                        var year = value.get(selectedyear);
+                        if (year != null) {
+                            //console.log(year);
+                            let propertyToShow;//population
+                            switch (selectedStory) {
+                                case 'World Population':
+                                    propertyToShow = "population";
+                                    break;
+                                case 'Migration as % of population':
+                                    propertyToShow = "TTotal";
+                                    break;
+                                case 'Female Migration as % of population':
+                                    propertyToShow = "FTotal";
+                                    break;
+                                case 'Male Migration as % of population':
+                                    propertyToShow = "MTotal";
+                                    break;
+                            }
+
+
+                            let propertyValue = (year[propertyToShow]);
+                            if (propertyValue != null) {
+                                return colorScale(propertyValue);
+                            }
+                            return "#ccc";
+                        } else {
+                            //console.log("ups2");
+                            return "#ccc";
+                        }
+                    } else {
+                        //console.log("ups3");
+                        return "#ccc";
+                    }
+                });
+
+
+
+        }
+
+        function reset() {
+            active.classed("active", false);
+            active = d3.select(null);
+            activeCountry = "";
+            activeCountryDescription = "";
+            resetData();
+            map.transition()
+                .duration(1000)
+                .call(zoom.transform, d3.zoomIdentity); // updated for d3 v4
+        }
+
+        function zoomed() {
+            map.style("stroke-width", 2 / d3.event.transform.k + "px");
+            map.attr("transform", d3.event.transform)
+        }
+
+        function stopped() {
+            if (d3.event.defaultPrevented) d3.event.stopPropagation();
+        }
+    </script>
+</body>
+</html>
