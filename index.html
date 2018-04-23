@@ -331,9 +331,9 @@
         var maxPop = 0;
         var rates = d3.map();//dictionary key=Country Names, then key=year
         d3.queue()
-            .defer(d3.json, "data/countries.geojson.txt")
-            .defer(d3.csv, "data/Data_Extract_From_Population_estimates_and_projections.csv")
-            .defer(d3.csv, "data/MigrantStock.csv")
+            .defer(d3.json, "datavis/data/countries.geojson.txt")
+            .defer(d3.csv, "datavis/data/Data_Extract_From_Population_estimates_and_projections.csv")
+            .defer(d3.csv, "datavis/data/MigrantStock.csv")
             .await(function (error, geojson, popdata, migrantdata) {
 
 
