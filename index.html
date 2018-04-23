@@ -934,14 +934,14 @@
                 .text(function (d) { return d.desc; })
                 ;
 
+            lineslegend2.select("g").remove();
+
             if (activeCountry != "" && selectedStory != "World Population") {
                 'T0_4', 'T5_9', 'T10_14', 'T15_19', 'T20_24', 'T25_29', 'T30_34', 'T35_39', 'T40_44', 'T45_49', 'T50_54', 'T55_59', 'T60_64', 'T65_69', 'T70_74', 'T75P'
                 var colors2 = [];
                 for (var i = 0; i <= 70; i = i + 10) {
                     colors2.push({ desc: i + " to " + (i + 10) + "", val: i });
                 }
-
-                lineslegend2.select("g").remove();
 
                 var legend2 = lineslegend2.append("g")
                     .attr("class", "legend")
